@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wren AI Gemini Dashboard</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <!-- Marked.js for Markdown parsing -->
+    <script src="marked.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-logo">
+                <span class="logo-accent">Wren</span> AI
+                <span class="badge">Gemini Portal</span>
+            </div>
+            <div class="connection-status">
+                <span class="status-dot online"></span>
+                <span>Active Connection: <strong id="datasource-name">DuckDB (jaffle_shop)</strong></span>
+            </div>
+        </header>
+
+        <!-- Main Workspace -->
+        <main class="app-workspace">
+            <!-- Left Panel: Agent Query Interface -->
+            <section class="panel agent-panel">
+                <div class="panel-header">
+                    <h2>Ask Gemini Agent</h2>
+                    <span class="panel-subtitle">Natural language SQL planner</span>
+                </div>
+                <div class="chat-container" id="chat-container">
+                    <div class="message system">
+                        <div class="message-content">
+                            Hello! Ask me any question about your database (e.g., <em>"Who is our top customer by lifetime value?"</em> or <em>"How many orders were placed last month?"</em>). I'll compile the SQL, run it, and present the result.
+                        </div>
+                    </div>
+                </div>
+                <form class="query-form" id="query-form">
+                    <input type="text" id="query-input" placeholder="Ask your database..." required autocomplete="off">
+                    <button type="submit" id="submit-btn">
+                        <span>Send</span>
+                        <svg class="send-icon" viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                    </button>
+                </form>
+            </section>
+
+            <!-- Right Panel: CLI Log Console -->
+            <section class="panel console-panel">
+                <div class="panel-header">
+                    <h2>CLI Execution Logs</h2>
+                    <div class="console-controls">
+                        <button class="control-btn active" data-filter="all">All</button>
+                        <button class="control-btn" data-filter="info">Info</button>
+                        <button class="control-btn" data-filter="debug">Debug</button>
+                        <button class="control-btn" data-filter="error">Error</button>
+                        <button class="control-btn text-btn" id="clear-console-btn">Clear</button>
+                    </div>
+                </div>
+                <div class="console-container">
+                    <pre class="console-output" id="console-output">Console initialized. Awaiting queries...</pre>
+                </div>
+                <div class="console-footer">
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="autoscroll-chk" checked>
+                        <span class="checkmark"></span>
+                        Auto-scroll terminal
+                    </label>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="main.js"></script>
+</body>
+</html>

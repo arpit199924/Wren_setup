@@ -1,0 +1,32 @@
+name: customers
+description: "One row per customer, with aggregated order stats"
+table_reference:
+  catalog: jaffle_shop
+  schema: main
+  table: customers
+columns:
+  - name: customer_id
+    type: integer
+    description: "Unique customer identifier"
+  - name: first_name
+    type: varchar
+    description: "Customer first name"
+  - name: last_name
+    type: varchar
+    description: "Customer last name"
+  - name: first_order
+    type: date
+    description: "Date of the customer's first order"
+  - name: most_recent_order
+    type: date
+    description: "Date of the customer's most recent order"
+  - name: number_of_orders
+    type: bigint
+    description: "Total number of orders placed"
+  - name: customer_lifetime_value
+    type: double
+    description: "Total amount spent across all orders"
+  - name: orders
+    type: orders
+    relationship: orders_customers
+primary_key: customer_id

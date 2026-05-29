@@ -1,0 +1,141 @@
+{
+  "catalog": "wren",
+  "schema": "public",
+  "models": [
+    {
+      "name": "customers",
+      "description": "One row per customer, with aggregated order stats",
+      "tableReference": {
+        "catalog": "jaffle_shop",
+        "schema": "main",
+        "table": "customers"
+      },
+      "columns": [
+        {
+          "name": "customer_id",
+          "type": "integer",
+          "description": "Unique customer identifier"
+        },
+        {
+          "name": "first_name",
+          "type": "varchar",
+          "description": "Customer first name"
+        },
+        {
+          "name": "last_name",
+          "type": "varchar",
+          "description": "Customer last name"
+        },
+        {
+          "name": "first_order",
+          "type": "date",
+          "description": "Date of the customer's first order"
+        },
+        {
+          "name": "most_recent_order",
+          "type": "date",
+          "description": "Date of the customer's most recent order"
+        },
+        {
+          "name": "number_of_orders",
+          "type": "bigint",
+          "description": "Total number of orders placed"
+        },
+        {
+          "name": "customer_lifetime_value",
+          "type": "double",
+          "description": "Total amount spent across all orders"
+        },
+        {
+          "name": "orders",
+          "type": "orders",
+          "relationship": "orders_customers"
+        }
+      ],
+      "primaryKey": "customer_id"
+    },
+    {
+      "name": "orders",
+      "description": "One row per order, with amount breakdown by payment type",
+      "tableReference": {
+        "catalog": "jaffle_shop",
+        "schema": "main",
+        "table": "orders"
+      },
+      "primaryKey": "order_id",
+      "columns": [
+        {
+          "name": "order_id",
+          "type": "integer",
+          "description": "Unique order identifier"
+        },
+        {
+          "name": "customer_id",
+          "type": "integer",
+          "description": "Identifier of the customer who placed the order"
+        },
+        {
+          "name": "order_date",
+          "type": "date",
+          "description": "Date the order was placed"
+        },
+        {
+          "name": "status",
+          "type": "varchar",
+          "description": "Status of the order (e.g. completed, shipped, returned)"
+        },
+        {
+          "name": "credit_card_amount",
+          "type": "double",
+          "description": "Amount paid by credit card"
+        },
+        {
+          "name": "coupon_amount",
+          "type": "double",
+          "description": "Amount discounted by coupon"
+        },
+        {
+          "name": "bank_transfer_amount",
+          "type": "double",
+          "description": "Amount paid by bank transfer"
+        },
+        {
+          "name": "gift_card_amount",
+          "type": "double",
+          "description": "Amount paid by gift card"
+        },
+        {
+          "name": "amount",
+          "type": "double",
+          "description": "Total amount paid for the order"
+        },
+        {
+          "name": "customers",
+          "type": "customers",
+          "relationship": "orders_customers"
+        },
+        {
+          "name": "customer_first_name",
+          "type": "varchar",
+          "isCalculated": true,
+          "expression": "customers.first_name"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "name": "orders_customers",
+      "models": [
+        "orders",
+        "customers"
+      ],
+      "joinType": "MANY_TO_ONE",
+      "condition": "orders.customer_id = customers.customer_id"
+    }
+  ],
+  "views": [],
+  "cubes": [],
+  "dataSource": "duckdb",
+  "layoutVersion": 2
+}

@@ -1,0 +1,117 @@
+# Wren AI
+
+*Turn any AI Agents into world-class data analysts through the open context layer that gives AI agents grounded, governed memory, context, and SQL across 20+ data sources, that helps you build GenBI, dashboards, and agentic analytics.*
+
+<iframe src="https://ghbtns.com/github-btn.html?user=Canner&repo=WrenAI&type=star&count=true&size=large" frameborder="0" scrolling="0" height="50" title="Wren AI"></iframe>
+
+**Wren AI is the open context layer for AI agents.** It sits between your data sources and any agent or application that needs to query them.
+
+The goal is simple: **one governed semantic layer for every data consumer**. Humans and agents should not rebuild business logic from scratch, argue over which number is right, or bypass governance just because the interface changed.
+
+Wren AI gives them the same machine-readable understanding of your business data: what the data means, how it should be joined, which definitions are approved, and how queries should be planned against the underlying database.
+
+## Why Wren AI exists
+
+Your agent reads schema, but schema does not tell it:
+
+- `status = 4` means refunded
+- `loyalty_v3` is the table your team actually uses
+- "monthly active users" excludes service accounts
+- "Project Lighthouse" maps to `campaign_id = 4172` in a planning doc nobody linked to the warehouse
+
+![Missing context layer](/img/oss/vision/missing-context-layer.png)
+
+Without that meaning, the agent writes confident, plausible, wrong SQL. The demo looks fine. The pilot looks fine. Production is where it breaks.
+
+Business context cannot be locked inside someone else's product. Your business definitions outlive your tools, and they deserve a format your team can inspect, version, fork, and share.
+
+## What Wren AI provides
+
+Wren AI turns raw database structure into a reusable context layer. It helps agents move from "I can see tables" to "I know what this business means by revenue, customer, refund, churn, and active account."
+
+For real business questions on real company data, an agent needs five layers of context (see [What does Wren AI mean by context?](/oss/concepts/what_is_context) for the full breakdown):
+
+| Layer | What it gives the agent | Status |
+| --- | --- | --- |
+| **Structural** | Tables, columns, types, keys, and relationships | Ships today |
+| **Semantic** | Business-facing models, reusable calculations, canonical tables, enum meaning | Ships today |
+| **Business** | Company definitions such as active customer, revenue, churn, and internal naming | Ships today |
+| **Operational** | Approved join paths, sanctioned queries, governance rules, and things never to compute | In active development |
+| **Behavioral** | Memory of past questions, successful SQL, user feedback, and examples | In active development |
+
+![With and without Wren AI](/img/oss/vision/with_without_wren.png)
+
+Here is what that looks like in practice. You write a small MDL file describing what your data means, and Wren AI plans every modeled query through it. See [What does MDL do for the agent?](/oss/concepts/what_is_mdl) for the deeper view.
+
+```yaml
+# models/customers/metadata.yml
+name: customers
+table_reference:
+  catalog: jaffle_shop
+  schema: main
+  table: customers
+primary_key: customer_id
+columns:
+  - { name: customer_id, type: INTEGER, is_primary_key: true }
+  - { name: first_name, type: VARCHAR }
+  - { name: number_of_orders, type: BIGINT }
+  - { name: customer_lifetime_value, type: DOUBLE }
+```
+
+The agent (or you, or any SDK) now queries `customers` as if it were a regular table:
+
+```bash
+$ wren --sql "SELECT first_name, customer_lifetime_value FROM customers ORDER BY 2 DESC LIMIT 3"
+first_name   customer_lifetime_value
+Tiffany      1245.67
+Lukas        1102.30
+Jennifer     1086.45
+```
+
+Behind the scenes, Wren AI:
+
+1. Looks up `customers` in the MDL
+2. Resolves it to the physical table declared in `table_reference`
+3. Drops columns not declared in the model (e.g. `email`, `phone`), keeping them invisible to the agent
+4. Applies any rules from `instructions.md` (default filters, canonical tables, business definitions)
+5. Returns rows
+
+## What is in the open core
+
+The open core includes:
+
+- **[MDL (Modeling Definition Language)](/oss/concepts/what_is_mdl)** — the semantic contract. MDL defines models, relationships, calculated fields, views, and agent-oriented metadata in files you can read, review, version, and fork.
+- **Rust semantic engine** — powered by Apache DataFusion. It plans and executes modeled SQL across supported data sources such as PostgreSQL, MySQL, BigQuery, Snowflake, DuckDB, ClickHouse, Trino, SQL Server, Databricks, Redshift, Oracle, Athena, Apache Spark, and more.
+- **[`wren` CLI](/oss/reference/cli)** — commands for querying, planning, validating, building context, profiling data, and managing memory.
+- **[Skills](/oss/reference/skills)** — structured workflows such as `wren-generate-mdl` and `wren-onboarding` that let AI coding agents operate Wren AI safely and reproducibly.
+- **Framework SDKs** — [LangChain](/oss/sdk/langchain) and [Pydantic AI](/oss/sdk/pydantic) integrations for attaching a Wren project to agent frameworks.
+- **[wren-core-wasm](/oss/sdk/wasm)** — the semantic engine compiled to WebAssembly, so MDL-aware SQL can run in the browser.
+
+## Roadmap
+
+The active arcs are end-to-end context enrichment, a correctness loop (including small golden evals agents can run), and tighter agent SDK coverage. See [GitHub Discussions](https://github.com/Canner/WrenAI/discussions) for live design threads and the prioritized roadmap.
+
+## Start here
+
+1. [Install](/oss/get_started/installation)
+2. [Quickstart with `jaffle_shop` sample data](/oss/get_started/quickstart)
+3. [Connect your own database](/oss/guides/connect)
+4. [Concepts](/oss/concepts/what_is_context) — the design ideas
+5. [Model your business](/oss/guides/model) — turn schema into MDL
+
+## Looking for the GenBI app docs?
+
+The **Wren AI GenBI** app, the Docker-based chat-first BI product, is now **sunset**. Its code lives on the `legacy/v1` branch and no security fixes will be issued. Existing deployments still work; reference docs are kept under [Wren AI GenBI — Sunset](/oss/overview/introduction) in the sidebar.
+
+For an actively maintained version with the same feature set, see [Wren AI Commercial](https://getwren.ai).
+
+## Dig deeper
+
+Each Concept page answers one design question:
+
+- [What does Wren AI mean by context?](/oss/concepts/what_is_context)
+- [How does the agent learn from your context?](/oss/concepts/agent_learning)
+- [How does memory get smarter over time?](/oss/concepts/memory_system)
+- [What does MDL do for the agent?](/oss/concepts/what_is_mdl)
+- [How does Wren AI keep agents from hallucinating?](/oss/concepts/correctness)
+- [Where does Wren AI sit in my stack?](/oss/concepts/stack_position)
