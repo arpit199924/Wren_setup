@@ -12,9 +12,37 @@ Below is a detailed analysis of both options, along with exact code implementati
 
 ---
 
-## Option 1: Container-as-a-Service (CaaS) — [RECOMMENDED]
+## Option 1: Container-as-a-Service (CaaS) - [RECOMMENDED]
 
 In this model, Wren runs as a set of isolated microservices deployed in our GKE cluster. Our bank's core application backend interacts with them using HTTP REST and GraphQL.
+
+### System Flow (ASCII Representation)
+```text
+                     +-----------------------+
+                     |     Bank Core App     |
+                     +---+---------------+---+
+                         |               |
+        1. GraphQL query |               | 3. Ask request
+         (with pruned    |               |  (natural language)
+          MDL schema)    v               v
+                +--------+------+  +-----+-----------+
+                |    wren-ui    |  | wren-ai-service |
+                | (Apollo GQL)  |  |    (FastAPI)    |
+                +--------+------+  +-----+-----------+
+                         |               |
+         2. REST dry-run |               | 4. REST dry-plan
+                         v               v
+                +--------+---------------+-----------+
+                |            ibis-server             |
+                |             (FastAPI)              |
+                +--------------------+---------------+
+                                     |
+                                     | 5. Execute query
+                                     v
+                            +--------+-------+
+                            | Target Database|
+                            +----------------+
+```
 
 ```mermaid
 graph LR
@@ -22,7 +50,7 @@ graph LR
     App -->|"3. Ask /v1/ask"| AIService["wren-ai-service"]
     UI -->|"2. REST /dry-run"| Ibis["ibis-server"]
     AIService -->|"4. REST /dry-plan"| Ibis
-    Ibis -->|"5. Queries"| DB[("Target Database")]
+    Ibis -->|"5. Queries"| DB["Target Database"]
 ```
 
 ### Why it is Recommended
@@ -93,6 +121,37 @@ async def get_conversational_answer(user_question: str, tenant_id: str, filtered
 
 If we want to minimize deployment footprint and network latency, we can compile the Rust-based `wren-core` compiler and import it directly into our Python application as a local library.
 
+### SDK Flow (ASCII Representation)
+```text
++-------------------------------------------------+
+|              Bank FastAPI Backend               |
+|                                                 |
+|  +-----------------+     1. transform_sql       |
+|  |   Controllers   |--------------------------+ |
+|  +--------+--------+                          | |
+|           |                                   | |
+|           | 2. transpile query                v |
+|           v                             +-----+-----+
+|  +--------+--------+                    | wren_core |
+|  |    SQLGlot      |                    |   (Rust)  |
+|  +--------+--------+                    +-----------+
+|           |                                     |
+|           |<------Trino Dialect SQL-------------+
+|           v
+|  +--------+--------+
+|  | Native Dialect  |
+|  |   SQL Query     |
+|  +--------+--------+
+|           |
++-----------|-------------------------------------+
+            |
+            | 3. Run Query
+            v
+   +--------+--------+
+   | Target Database |
+   +-----------------+
+```
+
 ```mermaid
 graph TD
     subgraph Bank_Backend ["Bank FastAPI Application"]
@@ -102,7 +161,7 @@ graph TD
     end
     MainApp --> SDK
     SDK --> SQLGlot
-    MainApp --> DB[("Target Database")]
+    MainApp --> DB["Target Database"]
 ```
 
 ### Why to use it
@@ -110,7 +169,7 @@ graph TD
 *   **Resource Efficiency:** No need to run GKE nodes for Go launcher, Node.js control planes, or Python connector microservices.
 
 ### Exact SDK Integration Code Example
-To embed the compiler in Python, compile the [wren-core-py](file:///Users/harshit/Desktop/SN/WrenAI_repo/wren-engine/wren-core-py) Rust project using `maturin` to generate a Python `.whl` package, which is then imported as `wren_core`.
+To embed the compiler in Python, compile the `wren-core-py` Rust project using `maturin` to generate a Python `.whl` package, which is then imported as `wren_core`.
 
 Here is the exact Python implementation utilizing `wren_core` and `sqlglot` to translate semantic queries locally:
 

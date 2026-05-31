@@ -10,6 +10,41 @@
 
 To transition from a single-user SQLite setup to a multi-tenant PostgreSQL metadata database, we must modify the existing database schemas. Every tenant is identified by a `tenant_id` (Business Unit ID).
 
+### Entity Relationship Model (Text Description)
+```text
++------------------+       +-------------------+       +--------------------+
+|     TENANTS      |       |   USER_TENANTS    |       |       USERS        |
+|------------------|       |-------------------|       |--------------------|
+| tenant_id (PK)   |<------+ tenant_id (FK)    |       | user_id (PK)       |
+| name             |       | role              |       | email              |
+| created_at       |       | user_id (FK)      +------>| name               |
++--------+---------+       +-------------------+       +---------+----------+
+         |                                                       |
+         | (1-to-Many)                                           | (1-to-Many)
+         v                                                       v
++--------+---------+                                   +---------+----------+
+|     PROJECTS     |                                   | TABLE_PERMISSIONS  |
+|------------------|                                   |--------------------|
+| id (PK)          |                                   | id (PK)            |
+| tenant_id (FK)   |                                   | user_id (FK)       |
+| name             |                                   | tenant_id (FK)     |
+| type             |                                   | datasource_id      |
+| connection_info  |                                   | table_name         |
++--------+---------+                                   | access (READ/DENY) |
+         |                                                 +--------------------+
+         | (1-to-Many)
+         v
++--------+---------+
+|     MODELS       |
+|------------------|
+| id (PK)          |
+| project_id (FK)  |
+| tenant_id (FK)   |
+| name             |
+| table_reference  |
++------------------+
+```
+
 ```mermaid
 erDiagram
     TENANTS {
@@ -32,7 +67,7 @@ erDiagram
         varchar tenant_id FK
         varchar name
         varchar type
-        text connection_info "Encrypted Connection Data"
+        text connection_info
     }
     MODELS {
         integer id PK
@@ -47,7 +82,7 @@ erDiagram
         varchar tenant_id FK
         varchar datasource_id
         varchar table_name
-        varchar access "READ or DENY"
+        varchar access
     }
 
     TENANTS ||--o{ USER_TENANTS : contains
@@ -60,7 +95,7 @@ erDiagram
 
 ### 1A. Knex Schema Migration Example (Node.js / wren-ui)
 
-The Knex migration scripts in [wren-ui/migrations](file:///Users/harshit/Desktop/SN/WrenAI_repo/wren-ui/migrations) must be extended to include `tenant_id` fields.
+The Knex migration scripts in `wren-ui/migrations` must be extended to include `tenant_id` fields.
 
 ```javascript
 // Migration: add_tenant_id_to_projects.js
@@ -116,7 +151,6 @@ Configure the Apollo server context to capture these headers and make them avail
 export interface Context {
   tenantId: string;
   userId: string;
-  // Existing fields...
 }
 
 export const createContext = ({ req }): Context => {
@@ -185,7 +219,6 @@ export async function getFilteredMDL(
   // 4. Prune relationship columns inside the remaining models
   filteredModels.forEach((model) => {
     model.columns = model.columns.filter((column) => {
-      // If column is a relationship, verify the target model is allowed
       if (column.relationship) {
         const rel = filteredRelationships.find((r) => r.name === column.relationship);
         return rel !== undefined;
@@ -227,18 +260,36 @@ class DBSchemaIndexing:
                 collection_name=collection_name,
                 vectors_config=self.embedder.get_vector_config()
             )
-            
-        # Index models...
 ```
 
 ---
 
 ## 5. Sequence Diagram: Dynamic Auth & Query Execution
 
+### Query Execution Sequence (Text Description)
+```text
+[Vikram User]   [wren-ui UI]   [Apollo Server]   [RBAC Engine]   [wren-ai-service]   [ibis-server]
+      |               |               |                |                 |                 |
+      |--Submit Ask-->|               |                |                 |                 |
+      |               |--POST graphql>|                |                 |                 |
+      |               |               |--Fetch tables->|                 |                 |
+      |               |               |<--Allowed list-|                 |                 |
+      |               |               |--Filter MDL--->|                 |                 |
+      |               |               |--POST ask----------------------->|                 |
+      |               |               |                |                 |--dry-plan------>|
+      |               |               |                |                 |<--Dialect SQL---|
+      |               |               |<--Dialect SQL--------------------|                 |
+      |               |               |--Decrypt KMS-->|                 |                 |
+      |               |               |--Execute query------------------------------------>|
+      |               |               |<--Row records--------------------------------------|
+      |               |<--JSON data---|                |                 |                 |
+      |<--Render grid-|               |                |                 |                 |
+```
+
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as Corporate Analyst (Vikram)
+    actor User as Corporate Analyst Vikram
     participant UI as Next.js UI (wren-ui)
     participant Apollo as Apollo GraphQL Server
     participant RBAC as RBAC Engine
@@ -253,7 +304,7 @@ sequenceDiagram
     RBAC-->>Apollo: Allowed: ['loans', 'customers']
     
     Apollo->>Apollo: Load full MDL JSON manifest from DB
-    Apollo->>Apollo: Run getFilteredMDL() to prune 'salaries' and 'internal_audit'
+    Apollo->>Apollo: Run getFilteredMDL() to prune 'salaries'
     
     Apollo->>AI: POST /v1/ask (Question + Filtered MDL + tenant_id='corp_banking')
     Note over AI: AI Service searches Qdrant collection:<br/>"tenant_corp_banking_db_schema"

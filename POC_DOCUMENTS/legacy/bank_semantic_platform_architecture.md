@@ -12,32 +12,32 @@ The platform adapts the components from the Wren `legacy/v1` architecture to pro
 
 ```mermaid
 graph TB
-    subgraph Client ["Layer 1 — Presentation"]
+    subgraph L1 ["Layer 1 - Presentation"]
         UI["Wren UI Next.js Client"]
         Gateway["API Gateway / Reverse Proxy"]
     end
 
-    subgraph Control ["Layer 2 — Control & Metadata (Tenant-Aware)"]
-        Apollo["Apollo GraphQL Server (wren-ui Backend)"]
-        DB[(PostgreSQL Metadata Store)]
+    subgraph L2 ["Layer 2 - Control and Metadata"]
+        Apollo["Apollo GraphQL Server"]
+        DB["PostgreSQL Metadata Store"]
         RBAC["Table-Level RBAC Middleware"]
     end
 
-    subgraph Intelligence ["Layer 3 — AI Orchestration"]
-        AIService["wren-ai-service (FastAPI)"]
-        Qdrant["Qdrant Vector DB (Tenant-Scoped Collections)"]
+    subgraph L3 ["Layer 3 - AI Orchestration"]
+        AIService["wren-ai-service FastAPI"]
+        Qdrant["Qdrant Vector DB"]
         Gemini["Gemini via Vertex AI"]
     end
 
-    subgraph Semantic ["Layer 4 — Semantic SQL & Execution"]
-        Ibis["ibis-server (FastAPI/Ibis Connectors)"]
-        Engine["wren-engine (Rust core)"]
+    subgraph L4 ["Layer 4 - Semantic SQL and Execution"]
+        Ibis["ibis-server FastAPI"]
+        Engine["wren-engine Rust Core"]
     end
 
-    subgraph Data ["Layer 5 — Target Databases"]
-        Postgres[("PostgreSQL")]
-        BigQuery[("Google BigQuery")]
-        Iceberg[("Apache Iceberg on GCS")]
+    subgraph L5 ["Layer 5 - Target Databases"]
+        Postgres["PostgreSQL"]
+        BigQuery["Google BigQuery"]
+        Iceberg["Apache Iceberg"]
     end
 
     UI --> Gateway
@@ -65,7 +65,7 @@ graph TB
 | **wren-ai-service** | FastAPI, Python | Manages AI pipelines (intent classification, SQL planning, corrections). Communicates with Qdrant and LLM, routing requests to tenant-isolated vector namespaces. |
 | **Qdrant Vector DB** | Qdrant | Stores high-dimensional vector embeddings of schemas and historical queries. Isolated by utilizing tenant-specific collections. |
 | **ibis-server** | FastAPI, Ibis, SQLGlot | A Python-based database execution service. Receives connection credentials and compiled MDL manifests dynamically on each request to fetch metadata or execute queries. |
-| **wren-engine** | Rust, PyO3 bindings | Rust-based semantic SQL compiler (`wren-core`) that validates and compiles semantic queries into native SQL dialetcs. Runs statelessly. |
+| **wren-engine** | Rust, PyO3 bindings | Rust-based semantic SQL compiler (`wren-core`) that validates and compiles semantic queries into native SQL dialects. Runs statelessly. |
 
 ---
 
@@ -75,20 +75,20 @@ The banking environment requires strict isolation between different business uni
 
 ```mermaid
 graph TD
-    Bank["Bank (Organization)"]
-    Bank --> BU1["Retail Banking (tenant_id: retail_banking)"]
-    Bank --> BU2["Corporate Banking (tenant_id: corp_banking)"]
+    Bank["Bank Organization"]
+    Bank --> BU1["Retail Banking BU"]
+    Bank --> BU2["Corporate Banking BU"]
 
     subgraph Retail ["Retail Banking Sandbox"]
         MDL1["Retail MDL Manifest"]
-        Coll1["Qdrant Collection: tenant_retail_schema"]
-        DS1[("BigQuery: retail_warehouse")]
+        Coll1["Qdrant Collection: Retail"]
+        DS1["BigQuery Data Source"]
     end
 
     subgraph Corp ["Corporate Banking Sandbox"]
         MDL2["Corporate MDL Manifest"]
-        Coll2["Qdrant Collection: tenant_corp_schema"]
-        DS2[("Postgres: corp_loans")]
+        Coll2["Qdrant Collection: Corporate"]
+        DS2["PostgreSQL Data Source"]
     end
 
     BU1 --> Retail
@@ -111,20 +111,20 @@ Within any business unit, users have varying access rights. For example, a Retai
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as Analyst (Priya)
-    participant GW as API Gateway / Auth
+    actor User as Analyst Priya
+    participant GW as API Gateway
     participant Apollo as Apollo GraphQL Server
-    participant DB as Metadata DB (PostgreSQL)
+    participant DB as Metadata DB
     participant AIService as wren-ai-service
     participant Ibis as ibis-server
 
-    User->>GW: POST /ask (Question: "Show loan amounts")
-    GW->>GW: Validate JWT, extract tenant_id & user_id
-    GW->>Apollo: Forward request with Headers (X-Tenant-ID, X-User-ID)
-    Apollo->>DB: Query allowed tables in table_permissions for User Priya
-    DB-->>Apollo: Allowed: loans, branches (Blocked: salaries)
+    User->>GW: Ask: "Show loan amounts"
+    GW->>GW: Extract tenant_id and user_id from JWT
+    GW->>Apollo: Forward with Headers
+    Apollo->>DB: Query allowed tables in table_permissions
+    DB-->>Apollo: Allowed: [loans, branches]
     Apollo->>DB: Load Full MDL for tenant_id
-    Apollo->>Apollo: Filter MDL: Remove salaries model and columns
+    Apollo->>Apollo: Filter MDL: Remove salaries model/columns
     Apollo->>AIService: POST /v1/ask (Question + Filtered MDL Schema)
     Note over AIService: AI sees only allowed tables.<br/>Hallucinating blocked tables is prevented.
     AIService->>Ibis: Dry-run & Compile (Filtered MDL + Query)
