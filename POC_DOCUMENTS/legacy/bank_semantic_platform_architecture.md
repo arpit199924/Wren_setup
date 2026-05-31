@@ -8,7 +8,45 @@
 
 ## 1. Multi-Tenant System Architecture
 
-The platform adapts the components from the Wren `legacy/v1` architecture to provide multi-tenant query intelligence and database access across different business units (BUs) within the bank. 
+The platform adapts the components from the Wren `legacy/v1` architecture to provide multi-tenant query intelligence and database access across different business units (BUs) within the bank.
+
+### Architectural Layout (ASCII Representation)
+```text
++-----------------------------------------------------------------+
+| Layer 1 - Presentation                                          |
+|   - Wren UI Next.js Client                                      |
+|   - API Gateway / Reverse Proxy                                 |
++-------------------------------+---------------------------------+
+                                |
+                                v (User Request with Auth)
++-------------------------------+---------------------------------+
+| Layer 2 - Control & Metadata (Tenant-Aware)                     |
+|   - Apollo GraphQL Server (wren-ui Backend)                     |
+|   - PostgreSQL Metadata Store                                   |
+|   - Table-Level RBAC Middleware                                 |
++-------------------------------+---------------------------------+
+                                |
+                                v (Filtered MDL Schema & Query)
++-------------------------------+---------------------------------+
+| Layer 3 - AI Orchestration                                      |
+|   - wren-ai-service FastAPI                                     |
+|   - Qdrant Vector DB (Tenant-Scoped Collections)                |
+|   - Gemini via Vertex AI                                        |
++-------------------------------+---------------------------------+
+                                |
+                                v (Semantic SQL compilation)
++-------------------------------+---------------------------------+
+| Layer 4 - Semantic SQL & Execution                              |
+|   - ibis-server FastAPI                                         |
+|   - wren-engine Rust Core                                       |
++-------------------------------+---------------------------------+
+                                |
+                                v (Target dialect execution)
++-------------------------------+---------------------------------+
+| Layer 5 - Target Databases                                      |
+|   - PostgreSQL, Google BigQuery, Apache Iceberg                 |
++-----------------------------------------------------------------+
+```
 
 ```mermaid
 graph TB
@@ -73,6 +111,21 @@ graph TB
 
 The banking environment requires strict isolation between different business units (e.g., Retail Banking, Corporate Banking, Risk, Treasury).
 
+### Isolation Structure
+```text
+[Bank Organization]
+   |
+   +--> [Retail Banking BU] (tenant_id: retail_banking)
+   |       - Retail MDL Manifest
+   |       - Qdrant Collection: "tenant_retail_banking_db_schema"
+   |       - BigQuery Data Source
+   |
+   +--> [Corporate Banking BU] (tenant_id: corp_banking)
+           - Corporate MDL Manifest
+           - Qdrant Collection: "tenant_corp_banking_db_schema"
+           - PostgreSQL Data Source
+```
+
 ```mermaid
 graph TD
     Bank["Bank Organization"]
@@ -107,6 +160,45 @@ graph TD
 ## 3. Table-Level RBAC Enforcement
 
 Within any business unit, users have varying access rights. For example, a Retail Analyst can view the `loans` table but is blocked from the `salary` table.
+
+### RBAC Query Execution Flow
+```text
+User (Analyst Priya)
+   |
+   | 1. Submit Query: "Show loan amounts" (JWT token attached)
+   v
+API Gateway
+   |
+   | 2. Extract tenant_id = 'retail' & user_id = 'priya'
+   v
+Apollo GraphQL Server
+   |
+   | 3. Query allowed tables for 'priya' in 'retail' from metadata DB
+   +--> Allowed: ['loans', 'branches']
+   |
+   | 4. Fetch full 'retail' MDL & prune models not in allowed list
+   +--> salaries table metadata is completely removed from context
+   v
+wren-ai-service (FastAPI)
+   |
+   | 5. Process query using Gemini & search scoped Qdrant index
+   | 6. Submit semantic SQL to ibis-server for dry-run
+   v
+ibis-server (FastAPI)
+   |
+   | 7. Transpile semantic SQL to target database query dialect
+   v
+Apollo GraphQL Server
+   |
+   | 8. Decrypt target database credentials using GCP KMS
+   | 9. Send query & credentials to ibis-server for execution
+   v
+Target Database (BigQuery/Postgres)
+   |
+   | 10. Execute and return raw records
+   v
+User Screen (Rendered Markdown Table)
+```
 
 ```mermaid
 sequenceDiagram
