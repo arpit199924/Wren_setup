@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wren-bridge"
+version = "0.1.0"
+description = "Bridge service: exposes legacy Wren Engine + Ibis Server REST APIs backed by the new wren-core Rust engine"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.121",
+    "uvicorn[standard]>=0.29",
+    "wrenai>=0.9",
+    "orjson>=3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["bridge"]
+

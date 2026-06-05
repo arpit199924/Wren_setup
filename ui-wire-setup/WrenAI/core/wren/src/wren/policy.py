@@ -1,0 +1,149 @@
+"""SQL policy validation for strict query mode.
+
+Validates that a parsed SQL AST only references tables defined in the MDL
+manifest and does not use any denied functions.
+"""
+
+from __future__ import annotations
+
+from typing import Iterable
+
+from sqlglot import exp
+
+from wren.config import WrenConfig
+from wren.model.error import ErrorCode, ErrorPhase, WrenError
+
+
+def resolve_model_name(
+    name: str,
+    quoted: bool,
+    model_names: Iterable[str],
+) -> str | None:
+    """Resolve a SQL table identifier to a manifest model name.
+
+    Follows the SQL convention used across Wren's CTE rewriter, policy check,
+    and manifest extractor: a quoted identifier must match a model name
+    case-sensitively; an unquoted identifier prefers an exact case match but
+    falls back to a case-insensitive scan. Returns ``None`` if no model
+    matches.
+    """
+    model_set = (
+        model_names if isinstance(model_names, (set, frozenset)) else set(model_names)
+    )
+    if name in model_set:
+        return name
+    if quoted:
+        return None
+    name_lower = name.lower()
+    for candidate in model_set:
+        if candidate.lower() == name_lower:
+            return candidate
+    return None
+
+
+def validate_sql_policy(
+    ast: exp.Expression,
+    model_names: set[str],
+    config: WrenConfig,
+) -> None:
+    """Raise ``WrenError`` if the SQL violates strict-mode policies.
+
+    Parameters
+    ----------
+    ast:
+        Parsed sqlglot AST of the user query.
+    model_names:
+        Set of model names defined in the MDL manifest.
+    config:
+        Wren configuration with strict_mode and denied_functions settings.
+    """
+    if config.strict_mode:
+        _check_tables(ast, model_names)
+    if config.denied_functions:
+        _check_functions(ast, config.denied_functions)
+
+
+def _visible_cte_names(node: exp.Expression) -> set[str]:
+    """Return CTE names visible at *node*'s scope by walking up the AST."""
+    names: set[str] = set()
+    cursor = node.parent
+    while cursor is not None:
+        # A WITH clause is visible to its parent SELECT and siblings.
+        with_clause = cursor.args.get("with_") if hasattr(cursor, "args") else None
+        if isinstance(with_clause, exp.With):
+            for cte in with_clause.expressions:
+                alias = cte.args.get("alias")
+                if alias:
+                    cte_name = (
+                        alias.this.name
+                        if isinstance(alias.this, exp.Identifier)
+                        else str(alias.this)
+                    )
+                    names.add(cte_name.lower())
+        cursor = cursor.parent
+    return names
+
+
+def _check_tables(
+    ast: exp.Expression,
+    model_names: set[str],
+) -> None:
+    for table in ast.find_all(exp.Table):
+        name = table.name
+        if not name:
+            # Table nodes with no name are table-valued functions
+            # (e.g. read_csv(), generate_series()). Block them in strict mode.
+            sql_text = table.sql()
+            if sql_text:
+                raise WrenError(
+                    ErrorCode.MODEL_NOT_FOUND,
+                    f"Table-valued function '{sql_text}' is not allowed. "
+                    "In strict mode, all table references must correspond to MDL models.",
+                    phase=ErrorPhase.SQL_POLICY_CHECK,
+                )
+            continue
+        quoted = (
+            bool(table.this.quoted) if isinstance(table.this, exp.Identifier) else False
+        )
+        if resolve_model_name(name, quoted, model_names) is not None:
+            continue
+        if name.lower() in _visible_cte_names(table):
+            continue
+        raise WrenError(
+            ErrorCode.MODEL_NOT_FOUND,
+            f"Table '{name}' is not defined in the MDL manifest. "
+            "In strict mode, all table references must correspond to MDL models.",
+            phase=ErrorPhase.SQL_POLICY_CHECK,
+        )
+
+    # Func subclasses used as FROM sources (e.g. UNNEST) produce no exp.Table
+    # node at all. Scan for Func nodes inside From clauses.
+    for from_clause in ast.find_all(exp.From):
+        source = from_clause.this
+        if isinstance(source, exp.Alias):
+            source = source.this
+        if isinstance(source, exp.Func):
+            raise WrenError(
+                ErrorCode.MODEL_NOT_FOUND,
+                f"Table-valued function '{source.sql()}' is not allowed. "
+                "In strict mode, all table references must correspond to MDL models.",
+                phase=ErrorPhase.SQL_POLICY_CHECK,
+            )
+
+
+def _check_functions(
+    ast: exp.Expression,
+    denied: frozenset[str],
+) -> None:
+    for func in ast.find_all(exp.Func):
+        if isinstance(func, exp.Anonymous):
+            name = func.name
+        else:
+            name = type(func).key
+        if name.lower() in denied:
+            raise WrenError(
+                ErrorCode.BLOCKED_FUNCTION,
+                f"Function '{name}' is not allowed. "
+                "This function is on the denied list.",
+                phase=ErrorPhase.SQL_POLICY_CHECK,
+            )
