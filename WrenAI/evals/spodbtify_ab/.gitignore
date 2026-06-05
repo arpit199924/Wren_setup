@@ -1,6 +1,0 @@
-runs/
-answers/
-scores/
-*.score.json
-*scores*.json
-agent_outputs/

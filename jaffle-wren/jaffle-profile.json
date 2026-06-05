@@ -1,5 +1,0 @@
-{
-  "datasource": "duckdb",
-  "url": "/Users/harshit/Desktop/SN/jaffle_shop_duckdb",
-  "format": "duckdb"
-}
